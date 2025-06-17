@@ -1,90 +1,74 @@
-from googlesearch import search
-import pandas as pd
-from urllib import parse
-import re
-import time
+import csv
+from serpapi import GoogleSearch
 from openpyxl import Workbook
 from openpyxl.styles import Font
-import csv
-# Search terms to query for LinkedIn profiles
-search_terms = [
-    "CTO",
-    "Co-Founder","Founder",'CMO','CFO','COO'
-]
+import time
 
-# Function to perform Google search and extract LinkedIn profile info
-def get_linkedin_profiles(company_name):
-    print(f"-------------------------{company_name}-------------------------------")
-    profiles = []
-    seen_profiles = set()  # Set to track unique profiles
+# Your SerpAPI key
+SERPAPI_API_KEY = "PASTE_API_KEY_HERE"  # Replace with your key
 
-    for term in search_terms:
-        query = f"{company_name} linkedin india {term}"
+# Define the search roles
+search_terms = ["Marketing Head", "Branding Head"]
 
-        try:
-            search_results = list(search(query, num_results=3))  # Fetch top 3 results
-        except Exception as e:
-            print(f"Error performing search for {query}: {e}")
-            continue
+# Function to search using SerpAPI
+def search_linkedin_profiles(company_name, role, api_key):
+    query = f"{company_name} {role} site:linkedin.com/in/"
+    search = GoogleSearch({
+        "q": query,
+        "api_key": api_key,
+        "num": 3,
+        "hl": "en",
+        "gl": "in"
+    })
 
-        for result in search_results:
-            if "linkedin.com" in result:
-                path = parse.urlparse(result).path
+    try:
+        results = search.get_dict()
+    except Exception as e:
+        print(f"Error fetching results for {query}: {e}")
+        return []
 
-                # Check if the URL points to a user profile
-                if path.split("/")[1] == "in":
-                    profile_name = result.split("/in/")[-1].split("-")
+    linkedin_profiles = []
+    for result in results.get("organic_results", []):
+        link = result.get("link", "")
+        title = result.get("title", "")
+        if "linkedin.com/in/" in link:
+            linkedin_profiles.append((title, role, link))
 
-                    # Filter and clean profile names
-                    pattern = re.compile(r"^[A-Za-z]+$")
-                    filtered_profile_name = [
-                        item for item in profile_name if pattern.match(item)
-                    ]
-                    profile_name = " ".join(filtered_profile_name).title()
+    return linkedin_profiles
 
-                    if profile_name not in seen_profiles:  # Avoid duplicates
-                        seen_profiles.add(profile_name)
-                        print(profile_name)
-                        profiles.append((profile_name, term, result))
-                        print(profile_name, result, term)
-                        print("\n\n")
-
-    return profiles
-
-# Input and output file paths
+# Read companies from CSV
 input_file = "input_companies.csv"
-output_file = "linkedin_profiles_trial.xlsx"
-
-# Read the company names from the input CSV
 with open(input_file, "r") as csvfile:
-    companies = [row[0] for row in csv.reader(csvfile)]
+    companies = [row[0].strip() for row in csv.reader(csvfile) if row]
     total_companies = len(companies)
 
-# Initialize workbook
+# Prepare Excel workbook
 wb = Workbook()
 ws = wb.active
 ws.title = "LinkedIn Profiles"
 ws.append(["Profile Name", "Company Name", "Role", "LinkedIn URL"])
 
-# Process each company and write data
+# Loop through companies and search
 for i, company in enumerate(companies):
-    profiles = get_linkedin_profiles(company)
-    for profile in profiles:
-        # Add hyperlink with display text "Link"
-        cell = ws.cell(row=ws.max_row + 1, column=4)
-        cell.value = "Link"  # Display text
-        cell.hyperlink = profile[2]  # Hyperlink URL
-        cell.font = Font(color="0000FF", underline="single")  # Format as hyperlink
-        ws.cell(row=ws.max_row, column=1).value = profile[0]  # Profile Name
-        ws.cell(row=ws.max_row, column=2).value = company     # Company Name
-        ws.cell(row=ws.max_row, column=3).value = profile[1]  # Role
+    print(f"Searching for profiles in: {company}")
+    for term in search_terms:
+        profiles = search_linkedin_profiles(company, term, SERPAPI_API_KEY)
+        for profile in profiles:
+            name, role, url = profile
+            cell = ws.cell(row=ws.max_row + 1, column=4)
+            cell.value = "Link"
+            cell.hyperlink = url
+            cell.font = Font(color="0000FF", underline="single")
+            ws.cell(row=ws.max_row, column=1).value = name
+            ws.cell(row=ws.max_row, column=2).value = company
+            ws.cell(row=ws.max_row, column=3).value = role
 
-    # Update progress
+    # Optional: Simple progress indicator
     progress = int((i + 1) / total_companies * 40)
-    print(f"[{('#' * progress)}{(' ' * (40 - progress))}]", end="\r")
-    time.sleep(0.1)
+    print(f"[{('#' * progress)}{(' ' * (40 - progress))}] {i+1}/{total_companies}", end="\r")
+    time.sleep(0.5)
 
-# Save workbook
+# Save to Excel
+output_file = "linkedin_profiles.xlsx"
 wb.save(output_file)
-print(f"\nLinkedIn profiles saved to {output_file}")
-
+print(f"\n✅ Done! LinkedIn profiles saved to '{output_file}'")
