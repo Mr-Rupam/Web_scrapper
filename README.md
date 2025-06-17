@@ -24,7 +24,8 @@ Ensure you have the following installed:
 1. Clone this repository or download the script.
 2. Install the required Python packages by running:
    ```bash
-   pip install googlesearch-python pandas openpyxl
+   pip install serpapi openpyxl pandas
+
    ```
 
 ---
